@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuotationStore } from './store/quotationStore';
+import { readPrefillFromUrl, clearPrefillFromUrl, mergeQuotation, fromDashboardPayload } from './utils/prefill';
 import GeneratePdfButton from './components/quotation/GeneratePdfButton';
 import CustomerForm from './components/quotation/CustomerForm';
 import ProjectForm from './components/quotation/ProjectForm';
@@ -31,8 +32,26 @@ function validateQuotation(q: Quotation) {
 export default function App() {
   const quotation = useQuotationStore((s) => s.quotation);
   const resetQuotation = useQuotationStore((s) => s.resetQuotation);
+  const loadQuotation = useQuotationStore((s) => s.loadQuotation);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [mobileTab, setMobileTab] = useState<'editor' | 'preview'>('editor');
+  const [prefilled, setPrefilled] = useState(false);
+
+  // Dashboard hand-off: ?data=<encodeURIComponent(JSON) flat payload>, sent
+  // by generateQuotation() in the BION dashboard's app.js (see
+  // src/utils/prefill.ts). Runs once on mount, merges onto the default
+  // template, then scrubs the param from the address bar.
+  useEffect(() => {
+    const payload = readPrefillFromUrl();
+    if (payload) {
+      const patch = fromDashboardPayload(payload);
+      const current = useQuotationStore.getState().quotation;
+      loadQuotation(mergeQuotation(current, patch));
+      clearPrefillFromUrl();
+      setPrefilled(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const errors = validateQuotation(quotation);
   const hasErrors = Object.keys(errors).length > 0;
@@ -58,6 +77,18 @@ export default function App() {
           <GeneratePdfButton quotation={quotation} disabled={hasErrors} />
         </div>
       </header>
+
+      {prefilled && (
+        <div className="bg-emerald-50 border-b border-emerald-200 px-6 py-2 text-xs text-emerald-700 flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <FileText size={13} /> Customer and project details were prefilled from the dashboard. Review before
+            generating the PDF.
+          </span>
+          <button onClick={() => setPrefilled(false)} className="text-emerald-500 hover:text-emerald-700">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {hasErrors && (
         <div className="bg-amber-50 border-b border-amber-200 px-6 py-2 text-xs text-amber-700 flex items-center gap-2">
